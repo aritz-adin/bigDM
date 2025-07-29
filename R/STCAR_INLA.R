@@ -164,7 +164,7 @@ STCAR_INLA <- function(carto=NULL, data=NULL, ID.area=NULL, ID.year=NULL, ID.gro
         ## Transform 'SpatialPolygonsDataFrame' object to 'sf' class
         carto <- sf::st_as_sf(carto)
 
-        ## Add the covariates defined in the X argument ##
+        ## Add the covariates defined in the X argument (scale numerical covariates) ##
         if(!is.null(X)){
                 if(is.matrix(X)){
                         if(is.null(colnames(X))) colnames(X) <- paste("X",seq(ncol(X)),sep="")
@@ -172,9 +172,18 @@ STCAR_INLA <- function(carto=NULL, data=NULL, ID.area=NULL, ID.year=NULL, ID.gro
                         X <- colnames(X)
                 }
                 if(!all(X %in% colnames(data))){
-                        stop(sprintf("'%s' variable not found in data object",X[!X %in% colnames(data)]))
+                        stop(sprintf("'%s' variable not found in data object", X[!X %in% colnames(data)]))
                 }else{
-                        data[,X] <- scale(data[,X])
+                        # data[,X] <- scale(data[,X])
+
+                        if(any(sapply(data[,X], function(col) !is.factor(col) && !is.numeric(col)))){
+                                stop("invalid data type for covariates: only factor or numeric types are allowed")
+                        }else{
+                                X.numeric <- X[sapply(data[X], is.numeric)]
+                                if(length(X.numeric) > 0){
+                                        data[,X.numeric] <- scale(data[,X.numeric])
+                                }
+                        }
                 }
         }
 
@@ -294,8 +303,16 @@ STCAR_INLA <- function(carto=NULL, data=NULL, ID.area=NULL, ID.year=NULL, ID.gro
 
                 form <- "O ~ "
 
-                if(length(X)>0){
-                        form <- paste(form,paste0(X,collapse="+"),"+")
+                # if(length(X)>0){
+                #         form <- paste(form, paste0(X,collapse="+"),"+")
+                # }
+
+                # Check which covariates have a constant value
+                X.rm <- sapply(data.INLA[,X,drop=FALSE], function(col) length(unique(col))==1)
+                X.d <- X[!X.rm]
+
+                if(length(X.d)>0){
+                        form <- paste(form, paste0(X.d,collapse="+"),"+")
                 }
 
                 if(spatial=="Leroux") {
@@ -371,6 +388,12 @@ STCAR_INLA <- function(carto=NULL, data=NULL, ID.area=NULL, ID.year=NULL, ID.gro
                                control.predictor=list(compute=TRUE, link=1, cdf=c(log(1))),
                                control.compute=list(dic=TRUE, cpo=TRUE, waic=TRUE, config=TRUE, return.marginals.predictor=TRUE),
                                control.inla=list(strategy=strategy), ...)
+
+                if(!is.null(X) & all(data.INLA[,names(X.rm)]!=0)){
+                        rownames(models$summary.fixed)[rownames(models$summary.fixed)=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                        names(models$marginals.fixed)[names(models$marginals.fixed)=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                        models$names.fixed[models$names.fixed=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                }
 
                 return(models)
         }

@@ -5,8 +5,8 @@ bibentry(
   author  = c(person("A","Adin"),
                    person("E","Orozco-Acosta"),
                    person("M D","Ugarte")),
-  year    = "2024",
-  note    = "R package version 0.5.5",
+  year    = "2025",
+  note    = "R package version 0.5.7",
   url = "https://github.com/spatialstatisticsupna/bigDM",
   textVersion = paste("Adin, A., Orozco-Acosta, E., and Ugarte, M.D. (2025).",
                       "bigDM: Scalable Bayesian Disease Mapping Models for High-Dimensional Data. R package version 0.5.6", "https://github.com/spatialstatisticsupna/bigDM.")

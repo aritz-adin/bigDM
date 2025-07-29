@@ -176,7 +176,7 @@ CAR_INLA <- function(carto=NULL, ID.area=NULL, ID.group=NULL, O=NULL, E=NULL, X=
         ## Transform 'SpatialPolygonsDataFrame' object to 'sf' class
         carto <- sf::st_as_sf(carto)
 
-        ## Add the covariates defined in the X argument ##
+        ## Add the covariates defined in the X argument (scale numerical covariates) ##
         if(!is.null(X)){
                 if(is.matrix(X)){
                         if(!isTRUE(all.equal(rownames(X),as.character(sf::st_set_geometry(carto, NULL)[,ID.area])))){
@@ -190,7 +190,16 @@ CAR_INLA <- function(carto=NULL, ID.area=NULL, ID.group=NULL, O=NULL, E=NULL, X=
                 if(!all(X %in% names(carto))){
                         stop(sprintf("'%s' variable not found in carto object",X[!X %in% names(carto)]))
                 }else{
-                        carto[,X] <- scale(sf::st_set_geometry(carto, NULL)[,X])
+                        # carto[,X] <- scale(sf::st_set_geometry(carto, NULL)[,X])
+
+                        if(any(sapply(sf::st_set_geometry(carto, NULL)[,X,drop=FALSE], function(col) !is.factor(col) && !is.numeric(col)))) {
+                                stop("Invalid data type for covariates: only factor or numeric types are allowed")
+                        }else{
+                                X.numeric <- X[sapply(sf::st_set_geometry(carto, NULL)[,X,drop=FALSE], is.numeric)]
+                                if(length(X.numeric) > 0){
+                                        carto[,X.numeric] <- scale(sf::st_set_geometry(carto, NULL)[, X.numeric])
+                                }
+                        }
                 }
         }
         data <- sf::st_set_geometry(carto, NULL)
@@ -247,9 +256,19 @@ CAR_INLA <- function(carto=NULL, ID.area=NULL, ID.group=NULL, O=NULL, E=NULL, X=
                 # Rs.Leroux <- inla.as.sparse(Rs.Leroux)
 
                 form <- "O ~ "
-                if(length(X)>0){
-                        form <- paste(form,paste0(X,collapse="+"),"+")
+
+                # if(length(X)>0){
+                #         form <- paste(form, paste0(X,collapse="+"),"+")
+                # }
+
+                # Check which covariates have a constant value
+                X.rm <- sapply(data.INLA[,X,drop=FALSE], function(col) length(unique(col))==1)
+                X.d <- X[!X.rm]
+
+                if(length(X.d)>0){
+                        form <- paste(form, paste0(X.d,collapse="+"),"+")
                 }
+
                 if(prior=="Leroux") {
                         if(!scale.model){
                                 form <- paste(form,"f(ID.area, model='generic1', Cmatrix=Rs.Leroux, constr=TRUE, hyper=list(prec=list(prior=sdunif),beta=list(prior=lunif, initial=0)))", sep="")
@@ -286,6 +305,12 @@ CAR_INLA <- function(carto=NULL, ID.area=NULL, ID.group=NULL, O=NULL, E=NULL, X=
                                control.compute=list(dic=TRUE, cpo=TRUE, waic=TRUE, config=TRUE, return.marginals.predictor=TRUE),
                                lincomb=lincomb,
                                control.inla=list(strategy=strategy), ...)
+
+                if(!is.null(X) & all(data.INLA[,names(X.rm)]!=0)){
+                        rownames(models$summary.fixed)[rownames(models$summary.fixed)=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                        names(models$marginals.fixed)[names(models$marginals.fixed)=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                        models$names.fixed[models$names.fixed=="(Intercept)"] <- paste0(names(which(X.rm)),"1")
+                }
 
                 return(models)
         }
